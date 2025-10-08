@@ -1,0 +1,144 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+
+//defining pins
+LiquidCrystal_I2C lcd(0x27, 16, 4);
+#define DHTPIN 2
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+#define IR_PIN 12
+#define TRIG 9
+#define ECHO 10
+#define MQ2 A0
+#define MQ4 A1
+#define MQ135 A2
+#define BUZZER 8
+#define LED 7
+
+// maximum readings
+#define MQ2_LIMIT 450
+#define MQ4_LIMIT 450
+#define MQ135_LIMIT 450
+#define TEMP_LIMIT 48
+#define DIST_LIMIT 19
+
+void setup() {
+  pinMode(IR_PIN, INPUT_PULLUP);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED, OUTPUT);
+
+  Serial.begin(9600);
+  lcd.init();
+  lcd.backlight();
+  dht.begin();
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Smart Helmet System");
+  lcd.setCursor(0, 1);
+  lcd.print("Loading ...");
+  delay(2000);
+}
+
+void loop() {
+  // readings
+  int irValue = digitalRead(IR_PIN);
+
+  // Ultrasonic
+  digitalWrite(TRIG, LOW); delayMicroseconds(2);
+  digitalWrite(TRIG, HIGH); delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+  long duration = pulseIn(ECHO, HIGH);
+  int distance = duration * 0.034 / 2;
+
+  // gas sensors
+  int mq2Value = analogRead(MQ2);
+  int mq4Value = analogRead(MQ4);
+  int mq135Value = analogRead(MQ135);
+
+  // DHT11
+  float temperatureC = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  if (isnan(temperatureC) || isnan(humidity)) {
+    Serial.println("DHT read error");
+    temperatureC = 0;
+    humidity = 0;
+  }
+  Serial.print("IR:"); Serial.print(irValue);
+  Serial.print(" Dist:"); Serial.print(distance);
+  Serial.print(" MQ2:"); Serial.print(mq2Value);
+  Serial.print(" MQ4:"); Serial.print(mq4Value);
+  Serial.print(" MQ135:"); Serial.print(mq135Value);
+  Serial.print(" Temp:"); Serial.print(temperatureC);
+  Serial.print("C Hum:"); Serial.println(humidity);
+
+  if (irValue == LOW) {
+    showAlert("IR Sensor", "Obstacle!");
+  } 
+  else if (distance > 0 && distance < DIST_LIMIT) {
+    showAlert("Ultrasonic", "Too Close!");
+  } 
+  else if (mq2Value > MQ2_LIMIT) {
+    showAlert("MQ2 Gas", "Value: " + String(mq2Value));
+  } 
+  else if (mq4Value > MQ4_LIMIT) {
+    showAlert("MQ4 Gas", "Value: " + String(mq4Value));
+  } 
+  else if (mq135Value > MQ135_LIMIT) {
+    showAlert("Air Quality", "Bad! " + String(mq135Value));
+  } 
+  else if (temperatureC > TEMP_LIMIT) {
+    showAlert("Temp High!", String(temperatureC, 1) + " C");
+  } 
+  else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Temp:");
+    lcd.print(temperatureC, 1);
+    lcd.print("C  Hum:");
+    lcd.print(humidity, 0);
+    lcd.print("%");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Dist:");
+    lcd.print(distance);
+    lcd.print("cm");
+
+    lcd.setCursor(0, 2);
+    lcd.print("MQ2:");
+    lcd.print(mq2Value);
+    lcd.print(" MQ4:");
+    lcd.print(mq4Value);
+
+    lcd.setCursor(0, 3);
+    lcd.print("MQ135:");
+    lcd.print(mq135Value);
+
+    digitalWrite(BUZZER, LOW);
+    digitalWrite(LED, LOW);
+
+    delay(2000);
+  }
+}
+
+void showAlert(String title, String message) {
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(BUZZER, HIGH);
+    digitalWrite(LED, HIGH);
+    delay(200);
+    digitalWrite(BUZZER, LOW);
+    digitalWrite(LED, LOW);
+    delay(200);
+  }
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(title);
+  lcd.setCursor(0, 1);
+  lcd.print(message);
+  delay(2000);
+}
